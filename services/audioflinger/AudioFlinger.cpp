@@ -150,9 +150,6 @@ AudioFlinger::AudioFlinger()
       mNextUniqueId(1),
       mMode(AUDIO_MODE_INVALID),
       mBtNrecIsOff(false)
-#ifdef QCOM_HARDWARE
-      ,mAllChainsLocked(false)
-#endif
 {
     getpid_cached = getpid();
     char value[PROPERTY_VALUE_MAX];
@@ -180,9 +177,6 @@ AudioFlinger::AudioFlinger()
 void AudioFlinger::onFirstRef()
 {
     int rc = 0;
-#ifdef QCOM_HARDWARE
-    mA2DPHandle = -1;
-#endif
 
     Mutex::Autolock _l(mLock);
 
@@ -758,9 +752,6 @@ status_t AudioFlinger::setMasterVolume(float value)
         return PERMISSION_DENIED;
     }
 
-#ifdef QCOM_HARDWARE
-    mA2DPHandle = -1;
-#endif
     Mutex::Autolock _l(mLock);
     mMasterVolume = value;
 
@@ -1299,13 +1290,6 @@ void AudioFlinger::registerClient(const sp<IAudioFlingerClient>& client)
             mRecordThreads.valueAt(i)->sendIoConfigEvent(AudioSystem::INPUT_OPENED);
         }
     }
-#ifdef QCOM_HARDWARE
-    // Send the notification to the client only once.
-    if (mA2DPHandle != -1) {
-        ALOGV("A2DP active. Notifying the registered client");
-        client->ioConfigChanged(AudioSystem::A2DP_OUTPUT_STATE, mA2DPHandle, &mA2DPHandle);
-    }
-#endif
 }
 
 #ifdef QCOM_HARDWARE
@@ -1498,25 +1482,13 @@ sp<IAudioRecord> AudioFlinger::openRecord(
     RecordThread *thread;
     size_t inFrameCount;
     int lSessionId;
-#ifdef QCOM_HARDWARE
-    size_t inputBufferSize = 0;
-    uint32_t channelCount = popcount(channelMask);
-#endif
 
     // check calling permissions
     if (!recordingAllowed()) {
         lStatus = PERMISSION_DENIED;
         goto Exit;
     }
-#ifdef QCOM_HARDWARE
-    // Check that audio input stream accepts requested audio parameters
-    inputBufferSize = getInputBufferSize(sampleRate, format, channelCount);
-    if (inputBufferSize == 0) {
-        lStatus = BAD_VALUE;
-        ALOGE("Bad audio input parameters: sampling rate %u, format %d, channels %d",  sampleRate, format, channelCount);
-        goto Exit;
-    }
-#endif
+
     // add client to list
     { // scope for mLock
         Mutex::Autolock _l(mLock);
@@ -1538,41 +1510,6 @@ sp<IAudioRecord> AudioFlinger::openRecord(
                 *sessionId = lSessionId;
             }
         }
-#ifdef QCOM_HARDWARE
-        // frameCount must be a multiple of input buffer size
-        // Change for Codec type
-        uint8_t channelCount = popcount(channelMask);
-        if ((audio_source_t)((int16_t)flags) == AUDIO_SOURCE_VOICE_COMMUNICATION) {
-             inFrameCount = inputBufferSize/channelCount/sizeof(short);
-        } else {
-            if ((format == AUDIO_FORMAT_PCM_16_BIT) ||
-                (format == AUDIO_FORMAT_PCM_8_BIT))
-            {
-              inFrameCount = inputBufferSize/channelCount/sizeof(short);
-            }
-            else if (format == AUDIO_FORMAT_AMR_NB)
-            {
-              inFrameCount = inputBufferSize/channelCount/AMR_FRAMESIZE;
-            }
-            else if (format == AUDIO_FORMAT_EVRC)
-            {
-              inFrameCount = inputBufferSize/channelCount/EVRC_FRAMESIZE;
-            }
-            else if (format == AUDIO_FORMAT_QCELP)
-            {
-              inFrameCount = inputBufferSize/channelCount/QCELP_FRAMESIZE;
-            }
-            else if (format == AUDIO_FORMAT_AAC)
-            {
-              inFrameCount = inputBufferSize/AAC_FRAMESIZE;
-            }
-            else if (format == AUDIO_FORMAT_AMR_WB)
-            {
-              inFrameCount = inputBufferSize/channelCount/AMR_WB_FRAMESIZE;
-            }
-        }
-        frameCount = ((frameCount - 1)/inFrameCount + 1) * inFrameCount;
-#endif
         // create new record track.
         // The record track uses one track in mHardwareMixerThread by convention.
         recordTrack = thread->createRecordTrack_l(client, sampleRate, format, channelMask,
@@ -1812,12 +1749,6 @@ audio_io_handle_t AudioFlinger::openOutput(audio_module_handle_t module,
             thread->mOutputFlags = flags;
 #ifdef QCOM_HARDWARE
         }
-        // if the device is a A2DP, then this is an A2DP Output
-        if (audio_is_a2dp_device((audio_devices_t) *pDevices))
-        {
-            mA2DPHandle = id;
-            ALOGV("A2DP device activated. The handle is set to %d", mA2DPHandle);
-        }
 #endif
 
         if (pSamplingRate != NULL) *pSamplingRate = config.sample_rate;
@@ -1927,14 +1858,6 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
         }
         audioConfigChanged_l(AudioSystem::OUTPUT_CLOSED, output, NULL);
         mPlaybackThreads.removeItem(output);
-#ifdef QCOM_HARDWARE
-        if (mA2DPHandle == output)
-        {
-            mA2DPHandle = -1;
-            ALOGV("A2DP OutputClosed Notifying Client");
-            audioConfigChanged_l(AudioSystem::A2DP_OUTPUT_STATE, mA2DPHandle, &mA2DPHandle);
-        }
-#endif
     }
     thread->exit();
     // The thread entity (active unit of execution) is no longer running here,
@@ -2182,12 +2105,7 @@ status_t AudioFlinger::setStreamOutput(audio_stream_type_t stream, audio_io_hand
         thread->invalidateTracks(stream);
 #endif
     }
-#ifdef QCOM_HARDWARE
-    if ( mA2DPHandle == output ) {
-        ALOGV("A2DP Activated and hence notifying the client");
-        audioConfigChanged_l(AudioSystem::A2DP_OUTPUT_STATE, mA2DPHandle, &output);
-    }
-#endif
+
     return NO_ERROR;
 }
 

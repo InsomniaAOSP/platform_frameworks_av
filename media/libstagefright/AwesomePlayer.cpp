@@ -219,8 +219,7 @@ AwesomePlayer::AwesomePlayer()
       mLastVideoTimeUs(-1),
       mFrameDurationUs(kInitFrameDurationUs),
       mTextDriver(NULL),
-      mIsFirstFrameAfterResume(false),
-      mBufferingDone(false) {
+      mIsFirstFrameAfterResume(false) {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
     DataSource::RegisterDefaultSniffers();
@@ -562,9 +561,6 @@ status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
 
 void AwesomePlayer::reset() {
     Mutex::Autolock autoLock(mLock);
-    if (mConnectingDataSource != NULL) {
-        mConnectingDataSource->disconnect();
-    }
     reset_l();
 }
 
@@ -792,8 +788,6 @@ void AwesomePlayer::onBufferingUpdate() {
 
         if (eos) {
             if (finalStatus == ERROR_END_OF_STREAM) {
-                ALOGV("End of Streaming, EOS Reached, Buffering is at 100 percent");
-                mBufferingDone = true;
                 notifyListener_l(MEDIA_BUFFERING_UPDATE, 100);
             }
             if (mFlags & PREPARING) {
@@ -809,8 +803,6 @@ void AwesomePlayer::onBufferingUpdate() {
                 int percentage = 100.0 * (double)cachedDurationUs / mDurationUs;
                 if (percentage > 100) {
                     percentage = 100;
-                    ALOGV("Cache at 100%, Buffering Done ");
-                    mBufferingDone = true;
                 }
 
                 notifyListener_l(MEDIA_BUFFERING_UPDATE, percentage);
@@ -852,7 +844,6 @@ void AwesomePlayer::onBufferingUpdate() {
         if (eos) {
             if (finalStatus == ERROR_END_OF_STREAM) {
                 notifyListener_l(MEDIA_BUFFERING_UPDATE, 100);
-                mBufferingDone = true;
             }
             if (mFlags & PREPARING) {
                 ALOGV("cache has reached EOS, prepare is done.");
@@ -862,7 +853,6 @@ void AwesomePlayer::onBufferingUpdate() {
             int percentage = 100.0 * (double)cachedDurationUs / mDurationUs;
             if (percentage > 100) {
                 percentage = 100;
-                mBufferingDone = true;
             }
 
             notifyListener_l(MEDIA_BUFFERING_UPDATE, percentage);
@@ -898,9 +888,7 @@ void AwesomePlayer::onBufferingUpdate() {
         }
     }
 
-    if (!mBufferingDone) {
-        postBufferingEvent_l();
-    }
+    postBufferingEvent_l();
 }
 
 void AwesomePlayer::sendCacheStats() {
@@ -1033,7 +1021,7 @@ status_t AwesomePlayer::play_l() {
 #ifdef QCOM_ENHANCED_AUDIO
 #ifdef USE_TUNNEL_MODE
                 // Create tunnel player if tunnel mode is enabled
-                ALOGV("Trying to create tunnel player mIsTunnelAudio %d, \
+                ALOGW("Trying to create tunnel player mIsTunnelAudio %d, \
                         LPAPlayer::mObjectsAlive %d, \
                         TunnelPlayer::mTunnelObjectsAlive = %d,\
                         (mAudioPlayer == NULL) %d",
@@ -1077,10 +1065,8 @@ status_t AwesomePlayer::play_l() {
                 char lpaDecode[PROPERTY_VALUE_MAX];
                 uint32_t minDurationForLPA = LPA_MIN_DURATION_USEC_DEFAULT;
                 char minUserDefDuration[PROPERTY_VALUE_MAX];
-                char minUserDefDurationDef[PROPERTY_VALUE_MAX];
-                snprintf(minUserDefDurationDef, sizeof(minUserDefDurationDef), "%d", LPA_MIN_DURATION_USEC_DEFAULT);
                 property_get("lpa.decode",lpaDecode,"0");
-                property_get("lpa.min_duration",minUserDefDuration,minUserDefDurationDef);
+                property_get("lpa.min_duration",minUserDefDuration,"LPA_MIN_DURATION_USEC_DEFAULT");
                 minDurationForLPA = atoi(minUserDefDuration);
                 if(minDurationForLPA < LPA_MIN_DURATION_USEC_ALLOWED) {
                     if(mAudioPlayer == NULL) {
@@ -1549,7 +1535,6 @@ status_t AwesomePlayer::seekTo_l(int64_t timeUs) {
     if (mFlags & CACHE_UNDERRUN) {
         modifyFlags(CACHE_UNDERRUN, CLEAR);
         play_l();
-        notifyListener_l(MEDIA_INFO, MEDIA_INFO_BUFFERING_END);
     }
 
     if ((mFlags & PLAYING) && mVideoSource != NULL && (mFlags & VIDEO_AT_EOS)) {
@@ -1706,10 +1691,8 @@ status_t AwesomePlayer::initAudioDecoder() {
         char lpaDecode[128];
         uint32_t minDurationForLPA = LPA_MIN_DURATION_USEC_DEFAULT;
         char minUserDefDuration[PROPERTY_VALUE_MAX];
-        char minUserDefDurationDef[PROPERTY_VALUE_MAX];
-        snprintf(minUserDefDurationDef, sizeof(minUserDefDurationDef), "%d", LPA_MIN_DURATION_USEC_DEFAULT);
         property_get("lpa.decode",lpaDecode,"0");
-        property_get("lpa.min_duration",minUserDefDuration,minUserDefDurationDef);
+        property_get("lpa.min_duration",minUserDefDuration,"LPA_MIN_DURATION_USEC_DEFAULT");
         minDurationForLPA = atoi(minUserDefDuration);
         if(minDurationForLPA < LPA_MIN_DURATION_USEC_ALLOWED) {
             ALOGE("LPAPlayer::Clip duration setting of less than 30sec not supported, defaulting to 60sec");
@@ -1905,12 +1888,6 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
 
 void AwesomePlayer::finishSeekIfNecessary(int64_t videoTimeUs) {
     ATRACE_CALL();
-    if (mSeeking != NO_SEEK)
-    {
-        Mutex::Autolock autoLock(mStatsLock);
-        mStats.mLastSeekToTimeMs = mSeekTimeUs/1000;
-        printStats();
-    }
 
     if (mSeeking == SEEK_VIDEO_ONLY) {
         mSeeking = NO_SEEK;
@@ -2092,15 +2069,6 @@ void AwesomePlayer::onVideoEvent() {
     {
         Mutex::Autolock autoLock(mMiscStateLock);
         mVideoTimeUs = timeUs;
-
-        int64_t decodingTime = timeUs;
-        int64_t mEditTime = 0;
-        mVideoTrack->getFormat( )->findInt64( kKeyEditOffset, &mEditTime );
-        decodingTime += mEditTime;
-        timeUs = decodingTime;
-
-        mVideoTimeUs = timeUs;
-
     }
 
     SeekType wasSeeking = mSeeking;

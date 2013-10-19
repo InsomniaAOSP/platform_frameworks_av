@@ -284,6 +284,17 @@ status_t AudioTrack::set(
         flags = (audio_output_flags_t)(flags &~AUDIO_OUTPUT_FLAG_DEEP_BUFFER);
     }
 
+#ifdef QCOM_HARDWARE
+    if ((streamType == AUDIO_STREAM_VOICE_CALL)
+         && (channelMask == AUDIO_CHANNEL_OUT_MONO)
+         && ((sampleRate == 8000 || sampleRate == 16000)))
+    {
+        ALOGD("Turn on Direct Output for VOIP RX");
+        flags = (audio_output_flags_t)(flags | AUDIO_OUTPUT_FLAG_VOIP_RX|AUDIO_OUTPUT_FLAG_DIRECT);
+    }
+#endif
+
+
     if (!audio_is_output_channel(channelMask)) {
         ALOGE("Invalid channel mask %#x", channelMask);
         return BAD_VALUE;
@@ -292,37 +303,13 @@ status_t AudioTrack::set(
     uint32_t channelCount = popcount(channelMask);
     mChannelCount = channelCount;
 
-#ifdef QCOM_HARDWARE
-#ifdef QCOM_VOIP_ENABLED
-    if ((streamType == AUDIO_STREAM_VOICE_CALL)
-         && (channelCount == 1)
-         && ((sampleRate == 8000 || sampleRate == 16000)))
-    {
-        ALOGD("Turn on Direct Output for VOIP RX");
-        flags = (audio_output_flags_t)(flags | AUDIO_OUTPUT_FLAG_VOIP_RX|AUDIO_OUTPUT_FLAG_DIRECT);
-    }
-#endif
-
-    if ((audio_stream_type_t)streamType == AUDIO_STREAM_VOICE_CALL) {
-        if (audio_is_linear_pcm(format)) {
-            mFrameSize = channelCount * audio_bytes_per_sample(format);
-            mFrameSizeAF = channelCount * sizeof(int16_t);
-        } else {
-            mFrameSize = sizeof(uint16_t);
-            mFrameSizeAF = sizeof(uint16_t);
-        }
+    if (audio_is_linear_pcm(format)) {
+        mFrameSize = channelCount * audio_bytes_per_sample(format);
+        mFrameSizeAF = channelCount * sizeof(int16_t);
     } else {
-#endif
-        if (audio_is_linear_pcm(format)) {
-            mFrameSize = channelCount * audio_bytes_per_sample(format);
-            mFrameSizeAF = channelCount * sizeof(int16_t);
-        } else {
-            mFrameSize = sizeof(uint8_t);
-            mFrameSizeAF = sizeof(uint8_t);
-        }
-#ifdef QCOM_HARDWARE
+        mFrameSize = sizeof(uint8_t);
+        mFrameSizeAF = sizeof(uint8_t);
     }
-#endif
 
     audio_io_handle_t output = AudioSystem::getOutput(
                                     streamType,
@@ -704,9 +691,7 @@ status_t AudioTrack::setLoop(uint32_t loopStart, uint32_t loopEnd, int loopCount
 // must be called with mLock held
 status_t AudioTrack::setLoop_l(uint32_t loopStart, uint32_t loopEnd, int loopCount)
 {
-    // SoundPool streaming implementation uses AudioTrack EVENT_MORE_DATA callback mode,
-    // and relies on being able to loop the data provided by the most recent callback.
-    if (/*mSharedBuffer == 0 ||*/ mIsTimed) {
+    if (mSharedBuffer == 0 || mIsTimed) {
         return INVALID_OPERATION;
     }
 

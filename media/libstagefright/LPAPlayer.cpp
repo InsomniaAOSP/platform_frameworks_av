@@ -49,10 +49,7 @@
 
 static const char   mName[] = "LPAPlayer";
 
-#ifndef LPA_DEFAULT_BUFFER_SIZE
-#define LPA_DEFAULT_BUFFER_SIZE 512
-#endif
-#define MEM_BUFFER_SIZE (LPA_DEFAULT_BUFFER_SIZE*1024)
+#define MEM_BUFFER_SIZE 524288
 #define MEM_BUFFER_COUNT 2
 
 #define PCM_FORMAT 2
@@ -120,9 +117,11 @@ LPAPlayer::~LPAPlayer() {
     }
 
     reset();
+#if 0
     if (mAudioFlinger != NULL) {
         mAudioFlinger->deregisterClient(AudioFlingerClient);
     }
+#endif
     mObjectsAlive--;
     mLpaInProgress = false;
 
@@ -167,6 +166,7 @@ void LPAPlayer::AudioFlingerLPAdecodeClient::binderDied(const wp<IBinder>& who) 
 void LPAPlayer::AudioFlingerLPAdecodeClient::ioConfigChanged(int event, audio_io_handle_t ioHandle, const void *param2) {
     ALOGV("ioConfigChanged() event %d", event);
 
+#if 0
     if (event != AudioSystem::A2DP_OUTPUT_STATE) {
         return;
     }
@@ -197,6 +197,7 @@ void LPAPlayer::AudioFlingerLPAdecodeClient::ioConfigChanged(int event, audio_io
         }
         break;
     }
+#endif
     ALOGV("ioConfigChanged Out");
 
 }

@@ -3,6 +3,10 @@ include $(CLEAR_VARS)
 
 include frameworks/av/media/libstagefright/codecs/common/Config.mk
 
+ifeq ($(BOARD_HTC_3D_SUPPORT),true)
+   LOCAL_CFLAGS += -DHTC_3D_SUPPORT
+endif
+
 LOCAL_SRC_FILES:=                         \
         ACodec.cpp                        \
         AACExtractor.cpp                  \
@@ -105,7 +109,7 @@ ifeq ($(TARGET_QCOM_MEDIA_VARIANT),caf)
 LOCAL_C_INCLUDES += \
         $(TOP)/hardware/qcom/media-caf/mm-core/inc
 else
-    ifeq ($(TARGET_QCOM_MEDIA_VARIANT),legacy)
+    ifeq ($(TARGET_QCOM_DISPLAY_VARIANT),legacy)
         LOCAL_C_INCLUDES += \
             $(TOP)/hardware/qcom/media-legacy/mm-core/inc
     else

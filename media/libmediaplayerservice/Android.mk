@@ -43,7 +43,6 @@ LOCAL_SHARED_LIBRARIES :=       \
 LOCAL_STATIC_LIBRARIES :=       \
     libstagefright_nuplayer     \
     libstagefright_rtsp         \
-    libmedia_helper             \
 
 LOCAL_C_INCLUDES :=                                                 \
     $(call include-path-for, graphics corecg)                       \
@@ -58,7 +57,7 @@ ifeq ($(BOARD_USES_QCOM_HARDWARE),true)
     LOCAL_C_INCLUDES += \
             $(TOP)/hardware/qcom/media-caf/mm-core/inc
     else
-        ifeq ($(TARGET_QCOM_MEDIA_VARIANT),legacy)
+        ifeq ($(TARGET_QCOM_DISPLAY_VARIANT),legacy)
             LOCAL_C_INCLUDES += \
                 $(TOP)/hardware/qcom/media-legacy/mm-core/inc
         else
@@ -77,7 +76,7 @@ ifeq ($(TARGET_ENABLE_QC_AV_ENHANCEMENTS),true)
         LOCAL_C_INCLUDES += \
             $(TOP)/hardware/qcom/media-caf/mm-core/inc
     else
-        ifeq ($(TARGET_QCOM_MEDIA_VARIANT),legacy)
+        ifeq ($(TARGET_QCOM_DISPLAY_VARIANT),legacy)
             LOCAL_C_INCLUDES += \
                 $(TOP)/hardware/qcom/media-legacy/mm-core/inc
         else
